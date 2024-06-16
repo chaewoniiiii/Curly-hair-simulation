@@ -1,36 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-class Spring extends THREE.Mesh{
-    constructor(radius, turns, segmentsPerTurn, height, growth, material){
-      let g = new THREE.CylinderGeometry(0.1, 0.1, 1, 16, sT * T).translate(0, 0.5, 0).rotateX(Math.PI * 0.5);
-      let initPos = g.attributes.position.clone();
-      super(g, material);
-      this.radius = radius;
-      this.turns = turns;
-      this.segmentsPerTurn = segmentsPerTurn;
-      this.height = height;
-      this.growth = growth;
-      
-      this.update = () => {
-        let _n = new THREE.Vector3(0, 1, 0), _v3 = new THREE.Vector3(), _s = new THREE.Vector3();
-  
-        let pos = g.attributes.position;
-        for(let i = 0; i < initPos.count; i++){
-          let ratio = initPos.getZ(i) * this.growth;
-          let angle = this.turns * Math.PI * 2 * ratio;
-          _v3.fromBufferAttribute(initPos, i).setZ(0);
-          _v3.applyAxisAngle(_n, angle + Math.PI * 0.5);
-          _v3.add(_s.setFromCylindricalCoords(this.radius, angle, this.height * ratio));
-          pos.setXYZ(i, ... _v3);
-        }
-        g.computeVertexNormals();
-        pos.needsUpdate = true;
-        
-      }
-    }
-  }
-
 let raycaster;
 let intersection = null;
 
@@ -170,14 +140,6 @@ curve.mesh.castShadow = true;
 
 scene.add(curve.mesh);
 
-let R = 2;
-let T = 7;
-let sT = 100;
-let H = 50;
-let spring = new Spring(R, T, sT, H, 0, new THREE.MeshNormalMaterial());
-spring.update();
-scene.add(spring);
-
 function animate() {
     const dt = 0.06; // Fixed time step
     simulation(dt);
@@ -188,30 +150,3 @@ function animate() {
 
 animate();
 
-//--------------------------------------
-
-class hair extends THREE.Mesh{
-    constructor(radius, height, material, position, numParticles){
-
-        this.radius = radius;
-        this.height = height;
-        this.material = material;
-        this.numParticles = numParticles;
-        this.Cpos = pos.copy();
-
-        let geometry = new THREE.CylinderGeometry(radius, radius, height, numParticles - 1);
-        let initpos = geometry.attributes.position;
-
-    }
-
-    curlyHairGenerator(pos){
-        for(i = this.pos ; i < numParticles; i++){
-            let cx = Cpos.x;
-            let cz = Cpos.z;
-        }
-    }
-
-    SpiralStrand(){
-
-    }
-}
