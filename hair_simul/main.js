@@ -1,27 +1,27 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-let raycaster;
+et raycaster;
 let intersection = null;
 
-const container = document.body.id;
+const container = document.body;
 
 // Create scene
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-const dirLight = new THREE.DirectionalLight( 0xffffff, 1 );
-dirLight.position.set( 0, 0, 1 );
+const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+dirLight.position.set(0, 0, 1);
 dirLight.castShadow = true;
 dirLight.shadow.mapSize.width = 1024;
 dirLight.shadow.mapSize.height = 1024;
-dirLight.shadow.camera.near = -10; 
-dirLight.shadow.camera.far = 100; 
-dirLight.shadow.camera.top = 30
-dirLight.shadow.camera.right = 30
-dirLight.shadow.camera.bottom = - 30
-dirLight.shadow.camera.left = - 30
-scene.add( dirLight );
+dirLight.shadow.camera.near = -10;
+dirLight.shadow.camera.far = 100;
+dirLight.shadow.camera.top = 30;
+dirLight.shadow.camera.right = 30;
+dirLight.shadow.camera.bottom = -30;
+dirLight.shadow.camera.left = -30;
+scene.add(dirLight);
 
 // Create renderer
 const renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -31,11 +31,12 @@ document.body.appendChild(renderer.domElement);
 
 camera.position.z = 40;
 
-const controls = new OrbitControls( camera, renderer.domElement );
+const controls = new OrbitControls(camera, renderer.domElement);
 
 //controls.update() must be called after any manual changes to the camera's transform
-camera.position.set( 0, 10, 30 );
+camera.position.set(0, 10, 30);
 controls.update();
+
 const restLength = 3;
 const numParticles = 16;
 
@@ -52,20 +53,6 @@ for (let i = 0; i < numParticles; i++) {
     d.push(new THREE.Vector3());
     x += restLength;
 }
-
-const positions = new Float32Array(numParticles * 3);
-for (let i = 0; i < numParticles; i++) {
-    positions[i * 3] = pos[i].x;
-    positions[i * 3 + 1] = pos[i].y;
-    positions[i * 3 + 2] = pos[i].z;
-}
-
-const geometry = new THREE.BufferGeometry();
-geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-
-const material = new THREE.PointsMaterial({ size: 6, sizeAttenuation: false });
-const particles = new THREE.Points(geometry, material);
-scene.add(particles);
 
 const gravity = new THREE.Vector3(0, -9.8, 0);
 const tmpVec3 = new THREE.Vector3();
@@ -115,38 +102,39 @@ function applyExternalForces(dt) {
     }
 }
 
+const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+
+function createTube() {
+    const curve = new THREE.CatmullRomCurve3(pos);
+    const tubeGeo = new THREE.TubeGeometry(curve, 200, 0.2, 20, false);
+    const mesh = new THREE.Mesh(tubeGeo, material);
+    return mesh;
+}
+
+let tubeMesh = createTube();
+scene.add(tubeMesh);
+
+function updateTube() {
+    scene.remove(tubeMesh);
+    tubeMesh = createTube();
+    scene.add(tubeMesh);
+}
+
 function simulation(dt) {
     applyExternalForces(dt);
     for (let i = 0; i < constraintIterations; i++) {
         solveConstraints();
     }
     integrate(dt);
-
-    const positions = particles.geometry.attributes.position.array;
-    for (let i = 0; i < numParticles; i++) {
-        positions[i * 3] = pos[i].x;
-        positions[i * 3 + 1] = pos[i].y;
-        positions[i * 3 + 2] = pos[i].z;
-    }
-    particles.geometry.attributes.position.needsUpdate = true;
 }
-
-const curve = new THREE.CatmullRomCurve3( pos );
-curve.mesh = new THREE.Line( geometry, new THREE.LineBasicMaterial( {
-    color: 0x0000ff,
-    opacity: 1
-} ) );
-curve.mesh.castShadow = true;
-
-scene.add(curve.mesh);
 
 function animate() {
     const dt = 0.06; // Fixed time step
     simulation(dt);
+    updateTube();
     controls.update();
     requestAnimationFrame(animate);
     renderer.render(scene, camera);
 }
 
 animate();
-
