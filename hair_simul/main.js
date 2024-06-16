@@ -1,8 +1,91 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
-et raycaster;
-let intersection = null;
+class HairSimulation {
+    constructor(numParticles, restLength, gravity, damping, constraintIterations) {
+        this.numParticles = numParticles;
+        this.restLength = restLength;
+        this.gravity = gravity;
+        this.damping = damping;
+        this.constraintIterations = constraintIterations;
+        
+        this.pos = [];
+        this.pos1 = [];
+        this.vel = [];
+        this.d = [];
+        this.tmpVec3 = new THREE.Vector3();
+
+        this.initParticles();
+    }
+
+    initParticles() {
+        let x = 0;
+        for (let i = 0; i < this.numParticles; i++) {
+            this.pos.push(new THREE.Vector3(x, 25, 0));
+            this.pos1.push(this.pos[i].clone());
+            this.vel.push(new THREE.Vector3());
+            this.d.push(new THREE.Vector3());
+            x += this.restLength;
+        }
+    }
+
+    FTL(index) {
+        const leader = this.pos1[index - 1];
+        const follower = this.pos1[index];
+
+        const dist = leader.distanceTo(follower);
+        const diff = dist - this.restLength;
+        const direction = this.tmpVec3.copy(leader).sub(follower).normalize();
+        const tmp = direction.multiplyScalar(diff * 0.5);
+        this.d[index].copy(tmp);
+        this.pos1[index].add(tmp);
+        this.pos1[index - 1].sub(tmp);
+    }
+
+    solveConstraints() {
+        for (let i = 1; i < this.numParticles; i++) {
+            this.FTL(i);
+        }
+        this.pos1[0].copy(this.pos[0]);
+    }
+
+    integrate(dt) {
+        for (let i = 1; i < this.numParticles; i++) {
+            const dp = this.tmpVec3.copy(this.pos1[i]).sub(this.pos[i]);
+            const val1 = dp.multiplyScalar(1 / dt);
+            if (i < this.numParticles - 1) {
+                const tmp = this.d[i + 1].clone().multiplyScalar((-1 / dt) * this.damping);
+                val1.add(tmp);
+            } else {
+                val1.multiplyScalar(this.damping);
+            }
+            this.vel[i].copy(val1);
+            this.pos[i].copy(this.pos1[i]);
+        }
+        this.vel[0].set(0, 0, 0);
+    }
+
+    applyExternalForces(dt) {
+        for (let i = 1; i < this.numParticles; i++) {
+            this.vel[i].add(this.gravity.clone().multiplyScalar(dt));
+            this.pos1[i].add(this.vel[i].clone().multiplyScalar(dt));
+        }
+    }
+
+    simulationStep(dt) {
+        this.applyExternalForces(dt);
+        for (let i = 0; i < this.constraintIterations; i++) {
+            this.solveConstraints();
+        }
+        this.integrate(dt);
+    }
+
+    getPositions() {
+        return this.pos;
+    }
+}
+
+//--------------------------
 
 const container = document.body;
 
@@ -37,100 +120,29 @@ const controls = new OrbitControls(camera, renderer.domElement);
 camera.position.set(0, 10, 30);
 controls.update();
 
-const restLength = 3;
-const numParticles = 16;
-
-const pos = [];
-const pos1 = [];
-const vel = [];
-const d = [];
-
-let x = 0;
-for (let i = 0; i < numParticles; i++) {
-    pos.push(new THREE.Vector3(x, 25, 0));
-    pos1.push(pos[i].clone());
-    vel.push(new THREE.Vector3());
-    d.push(new THREE.Vector3());
-    x += restLength;
-}
-
-const gravity = new THREE.Vector3(0, -9.8, 0);
-const tmpVec3 = new THREE.Vector3();
-const damping = 0.99;
-const constraintIterations = 15;
-
-function FTL(index) {
-    const leader = pos1[index - 1];
-    const follower = pos1[index];
-
-    const dist = leader.distanceTo(follower);
-    const diff = dist - restLength;
-    const direction = tmpVec3.copy(leader).sub(follower).normalize();
-    const tmp = direction.multiplyScalar(diff * 0.5);
-    d[index].copy(tmp);
-    pos1[index].add(tmp);
-    pos1[index - 1].sub(tmp);
-}
-
-function solveConstraints() {
-    for (let i = 1; i < numParticles; i++) {
-        FTL(i);
-    }
-    pos1[0].copy(pos[0]);
-}
-
-function integrate(dt) {
-    for (let i = 1; i < numParticles; i++) {
-        const dp = tmpVec3.copy(pos1[i]).sub(pos[i]);
-        const val1 = dp.multiplyScalar(1 / dt);
-        if (i < numParticles - 1) {
-            const tmp = d[i + 1].clone().multiplyScalar((-1 / dt) * damping);
-            val1.add(tmp);
-        } else {
-            val1.multiplyScalar(damping);
-        }
-        vel[i].copy(val1);
-        pos[i].copy(pos1[i]);
-    }
-    vel[0].set(0, 0, 0);
-}
-
-function applyExternalForces(dt) {
-    for (let i = 1; i < numParticles; i++) {
-        vel[i].add(gravity.clone().multiplyScalar(dt));
-        pos1[i].add(vel[i].clone().multiplyScalar(dt));
-    }
-}
+const hairSim = new HairSimulation(16, 3, new THREE.Vector3(0, -9.8, 0), 0.99, 15);
 
 const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
 
-function createTube() {
-    const curve = new THREE.CatmullRomCurve3(pos);
+function createTube(positions) {
+    const curve = new THREE.CatmullRomCurve3(positions);
     const tubeGeo = new THREE.TubeGeometry(curve, 200, 0.2, 20, false);
     const mesh = new THREE.Mesh(tubeGeo, material);
     return mesh;
 }
 
-let tubeMesh = createTube();
+let tubeMesh = createTube(hairSim.getPositions());
 scene.add(tubeMesh);
 
 function updateTube() {
     scene.remove(tubeMesh);
-    tubeMesh = createTube();
+    tubeMesh = createTube(hairSim.getPositions());
     scene.add(tubeMesh);
-}
-
-function simulation(dt) {
-    applyExternalForces(dt);
-    for (let i = 0; i < constraintIterations; i++) {
-        solveConstraints();
-    }
-    integrate(dt);
 }
 
 function animate() {
     const dt = 0.06; // Fixed time step
-    simulation(dt);
+    hairSim.simulationStep(dt);
     updateTube();
     controls.update();
     requestAnimationFrame(animate);
