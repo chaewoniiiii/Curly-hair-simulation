@@ -1,14 +1,17 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { vec3 } from 'three/examples/jsm/nodes/Nodes.js';
 
 class HairSimulation {
-    constructor(numParticles, restLength, gravity, damping, constraintIterations) {
+    constructor(numParticles, restLength, gravity, damping, constraintIterations, root) {
         this.numParticles = numParticles;
         this.restLength = restLength;
         this.gravity = gravity;
         this.damping = damping;
         this.constraintIterations = constraintIterations;
-        
+        this.x = root.x;
+        this.y = root.y;
+        this.z = root.z;
         this.pos = [];
         this.pos1 = [];
         this.vel = [];
@@ -19,13 +22,13 @@ class HairSimulation {
     }
 
     initParticles() {
-        let x = 0;
+        let dx = 0;
         for (let i = 0; i < this.numParticles; i++) {
-            this.pos.push(new THREE.Vector3(x, 25, 0));
+            this.pos.push(new THREE.Vector3(this.x + dx, this.y, this.z));
             this.pos1.push(this.pos[i].clone());
             this.vel.push(new THREE.Vector3());
             this.d.push(new THREE.Vector3());
-            x += this.restLength;
+            dx += this.restLength;
         }
     }
 
@@ -85,9 +88,61 @@ class HairSimulation {
     }
 }
 
-//--------------------------
+const hairSim = new HairSimulation(16, 3, new THREE.Vector3(0, -9.8, 0), 0.99, 15, new THREE.Vector3(0,25,0));
+const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
 
-const container = document.body;
+class Hair {
+    constructor(numStrands) {
+
+        this.numStrands = numStrands;
+        this.numParticles = 100;
+    }
+
+    initStrand() {
+        let cx = 0;
+        let cz = 0;
+        let radius = 0.01;
+
+        for (let i = 0; i < numStrands; i++) {
+            let angle = Math.random() * Math.PI * 2;
+            let distance = Math.random() * radius;
+
+            let x = cx + distance * Math.cos(angle);
+            let z = cz + distance * Math.sin(angle);
+
+            const hairSim = new HairSimulation(16, 3, new THREE.Vector3(0, -9.8, 0), 0.99, 15, new vec3(x,25,z));
+            let tubeMesh = createTube(hairSim.getPositions());
+            scene.add(tubeMesh);
+        }
+    }
+
+    generateSpiralStrand(length, radius, root) {
+        let angle = length / ((this.numParticles - 1) * radius);
+        let step = 1;
+
+        let dirX = new THREE.Vector3(1, 0, 0);
+        let dirY = new THREE.Vector3(0,-1,0);
+        let dirZ = new THREE.Vector3(0,1,1);
+
+        let w = (Math.random() - 0.5) * 0.03;
+        angle += w;
+
+        for(let i=0; i < numParticles; i++){
+            let curl_p = dirX.copy().multiplyScalar(Math.cos(i * angle)).add(dirZ.copy().multiplyScalar(Math.sin(i * angle))).sub(dirX).multiplyScalar(radius);
+            curl_p.add(dirY.copy().multiplyScalar(i * step));
+
+            let t = i / this.numParticles - 1;
+        }
+        
+    }
+
+    updateStrand(){
+        hairSim.simulationStep(0.06);
+        updateTube();
+    }
+}
+
+//--------------------------
 
 // Create scene
 const scene = new THREE.Scene();
@@ -120,10 +175,6 @@ const controls = new OrbitControls(camera, renderer.domElement);
 camera.position.set(0, 10, 30);
 controls.update();
 
-const hairSim = new HairSimulation(16, 3, new THREE.Vector3(0, -9.8, 0), 0.99, 15);
-
-const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-
 function createTube(positions) {
     const curve = new THREE.CatmullRomCurve3(positions);
     const tubeGeo = new THREE.TubeGeometry(curve, 200, 0.2, 20, false);
@@ -131,20 +182,18 @@ function createTube(positions) {
     return mesh;
 }
 
-let tubeMesh = createTube(hairSim.getPositions());
-scene.add(tubeMesh);
-
 function updateTube() {
     scene.remove(tubeMesh);
     tubeMesh = createTube(hairSim.getPositions());
     scene.add(tubeMesh);
 }
 
+let hair = new Hair(10);
+
 function animate() {
     const dt = 0.06; // Fixed time step
-    hairSim.simulationStep(dt);
-    updateTube();
-    controls.update();
+    hair.initStrand();
+    hair.updateStrand();
     requestAnimationFrame(animate);
     renderer.render(scene, camera);
 }
