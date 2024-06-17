@@ -2,13 +2,13 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 
 class HairSimulation {
-    constructor(numParticles, restLength, gravity, damping, constraintIterations) {
+    constructor(numParticles, restLength, gravity, damping, constraintIterations, root) {
         this.numParticles = numParticles;
         this.restLength = restLength;
         this.gravity = gravity;
         this.damping = damping;
         this.constraintIterations = constraintIterations;
-        
+        this.root = root;
         this.pos = [];
         this.pos1 = [];
         this.vel = [];
@@ -19,13 +19,12 @@ class HairSimulation {
     }
 
     initParticles() {
-        let x = 0;
         for (let i = 0; i < this.numParticles; i++) {
-            this.pos.push(new THREE.Vector3(x, 25, 0));
-            this.pos1.push(this.pos[i].clone());
+            const position = new THREE.Vector3(this.root.x + i * this.restLength, this.root.y, this.root.z);
+            this.pos.push(position.clone());
+            this.pos1.push(position.clone());
             this.vel.push(new THREE.Vector3());
             this.d.push(new THREE.Vector3());
-            x += this.restLength;
         }
     }
 
@@ -86,6 +85,56 @@ class HairSimulation {
 }
 
 //--------------------------
+class Hair {
+    constructor(numStrands) {
+        this.numStrands = numStrands;
+        this.hairSims = [];
+        this.materials = [];
+    }
+
+    initStrand(scene) {
+        let cx = 0;
+        let cz = 0;
+        let radius = 0.5;
+
+        for (let i = 0; i < this.numStrands; i++) {
+            let angle = Math.random() * Math.PI * 2;
+            let distance = Math.random() * radius * 2;
+
+            let x = cx + distance * Math.cos(angle);
+            let z = cz + distance * Math.sin(angle);
+
+            const root = new THREE.Vector3(x, 25, z);
+            const hairSim = new HairSimulation(16, 3, new THREE.Vector3(0, -9.8, 0), 0.99, 15, root);
+            this.hairSims.push(hairSim);
+
+            const color = new THREE.Color(0xffffff);
+            color.setHex(Math.random() * 0xffffff);
+            const material = new THREE.MeshBasicMaterial({ color: color });
+            this.materials.push(material);
+
+            let tubeMesh = createTube(hairSim.getPositions(), material);
+            tubeMesh.castShadow = true;
+            scene.add(tubeMesh);
+        }
+    }
+
+    generateSpiral(){
+
+    }
+
+    updateStrand() {
+        for (const hairSim of this.hairSims) {
+            hairSim.simulationStep(0.06);
+        }
+    }
+
+    getMaterials() {
+        return this.materials;
+    }
+}
+
+//--------------------------
 
 const container = document.body;
 
@@ -112,38 +161,39 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 document.body.appendChild(renderer.domElement);
 
-camera.position.z = 40;
-
 const controls = new OrbitControls(camera, renderer.domElement);
 
-//controls.update() must be called after any manual changes to the camera's transform
-camera.position.set(0, 10, 30);
+camera.position.set(0, 10, 40);
 controls.update();
 
-const hairSim = new HairSimulation(16, 3, new THREE.Vector3(0, -9.8, 0), 0.99, 15);
+const hair = new Hair(10); // Initialize Hair with 10 strands
+hair.initStrand(scene);
 
-const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
-
-function createTube(positions) {
+function createTube(positions, material) {
     const curve = new THREE.CatmullRomCurve3(positions);
-    const tubeGeo = new THREE.TubeGeometry(curve, 200, 0.2, 20, false);
+    const tubeGeo = new THREE.TubeGeometry(curve, 100, 0.2, 20, false);
     const mesh = new THREE.Mesh(tubeGeo, material);
     return mesh;
 }
 
-let tubeMesh = createTube(hairSim.getPositions());
-scene.add(tubeMesh);
-
-function updateTube() {
-    scene.remove(tubeMesh);
-    tubeMesh = createTube(hairSim.getPositions());
-    scene.add(tubeMesh);
+function updateTube(hair) {
+    const materials = hair.getMaterials();
+    let i = 0;
+    // Clear previous strands
+    while (scene.children.length > 1) {
+        scene.remove(scene.children[1]);
+    }
+    // Create and add new strands
+    for (const hairSim of hair.hairSims) {
+        const tubeMesh = createTube(hairSim.getPositions(), materials[i]);
+        scene.add(tubeMesh);
+        i++;
+    }
 }
 
 function animate() {
-    const dt = 0.06; // Fixed time step
-    hairSim.simulationStep(dt);
-    updateTube();
+    hair.updateStrand();
+    updateTube(hair);
     controls.update();
     requestAnimationFrame(animate);
     renderer.render(scene, camera);
