@@ -171,7 +171,7 @@ hair.initStrand(scene);
 
 function createTube(positions, material) {
     const curve = new THREE.CatmullRomCurve3(positions);
-    const tubeGeo = new THREE.TubeGeometry(curve, 100, 0.2, 20, false);
+    const tubeGeo = new THREE.TubeGeometry(curve, 20, 0.2, 10, false);
     const mesh = new THREE.Mesh(tubeGeo, material);
     return mesh;
 }
