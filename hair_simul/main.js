@@ -4,7 +4,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 const anchoredParticles = [];
 
 class HairSimulation {
-    constructor(numParticles, restLength, gravity, damping, constraintIterations, root) {
+    constructor(numParticles, restLength, gravity, damping, constraintIterations, root, sphere) {
         this.numParticles = numParticles;
         this.restLength = restLength;
         this.gravity = gravity;
@@ -21,6 +21,7 @@ class HairSimulation {
         this.isP = false;
         this.anchored = false;
         this.radius = 3;
+        this.sphere = sphere;
         this.initParticles();
     }
 
@@ -40,7 +41,6 @@ class HairSimulation {
     FTL(index) {
         const leader = this.pos1[index - 1];
         const follower = this.pos1[index];
-        console.log(follower);
         let dist = 1;
         if(follower === undefined){
             console.log('error!');
@@ -83,21 +83,28 @@ class HairSimulation {
         this.isP = true;
         let minD2 = Infinity;
         this.grabId = -1;
+
         for (let i = 0; i < this.numParticles; i++) {
+            if (!this.pos[i]) {
+                continue;
+            }
             let d2 = this.p.distanceToSquared(this.pos[i]);
             if (d2 < minD2) {
                 minD2 = d2;
                 this.grabId = i;
             }
         }
-
+    
         if (this.grabId >= 0) {
             this.invMass[this.grabId] = 0.0;
             this.pos1[this.grabId].copy(this.p);
             this.vel[this.grabId].set(0, 0, 0);
-            
+
+        } else {
+            console.log("Error: No particle grabbed.");
         }
     }
+    
 
     moveGrabbed(pos, vel) {
         if (this.grabId >= 0) {
@@ -118,30 +125,30 @@ class HairSimulation {
         this.isP = false;
     }
 
-    collisionDetection(){
-        for(let i = 0; i < this.numParticles - 1; i++){
-            const p0 = this.pos1[i];
-            const p1 = this.pos1[i+1];
-            this.tmpVec3.set(mouseXY.x, mouseXY.y, 0);
-            const diff_p0Sphere = p0.sub(mouseXY);
-            const diff_p1Sphere = p1.sub(mouseXY);
-            const diff = diff_p0Sphere.sub(diff_p1Sphere);
-
-            const t = -(diff_p0Sphere.dot(diff))/ diff.length();
-            t = Math.min(Math.max(t, 0.0), 1.0);
-
-            const p = diff_p0Sphere.add(diff.clone().multiplyScalar(t));
-
-            if(p.length() < 3.0){
-                const normal = p.clone();
-                normal.normalize().multiplyScalar(3.0) - p;
-                p0.add(normal);
-                p1.add(normal); 
-
+    collisionDetection() {
+        for (let i = 0; i < this.numParticles - 1; i++) {
+            const p0 = this.pos1[i].clone();
+            const p1 = this.pos1[i + 1].clone();
+            const spherePos = this.sphere.position.clone();
+    
+            const diff_p0Sphere = p0.clone().sub(spherePos);
+            const diff_p1Sphere = p1.clone().sub(spherePos);
+            const diff = diff_p0Sphere.clone().sub(diff_p1Sphere);
+    
+            const t = -(diff_p0Sphere.dot(diff)) / diff.length();
+            const clampedT = Math.min(Math.max(t, 0.0), 1.0);
+    
+            const p = diff_p0Sphere.add(diff.clone().multiplyScalar(clampedT));
+    
+            if (p.length() < this.radius) {
+                const normal = p.clone().normalize().multiplyScalar(this.radius - p.length());
+                this.pos1[i].add(normal);
+                this.pos1[i+1].add(normal);
             }
         }
-
     }
+    
+    
 
     integrate(dt) {
         for (let i = 1; i < this.numParticles; i++) {
@@ -167,11 +174,11 @@ class HairSimulation {
 
     simulationStep(dt) {
         this.applyExternalForces(dt);
-        //this.collisionDetection();
         for (let i = 0; i < this.constraintIterations; i++) {
             this.solveConstraints();
         }
         this.integrate(dt);
+        this.collisionDetection();
     }
 
     getPositions() {
@@ -180,10 +187,11 @@ class HairSimulation {
 }
 
 class Hair {
-    constructor(numStrands) {
+    constructor(numStrands, sphere) {
         this.numStrands = numStrands;
         this.hairSims = [];
         this.materials = [];
+        this.sphere = sphere;
     }
 
     initStrand(scene) {
@@ -193,18 +201,18 @@ class Hair {
 
         for (let i = 0; i < this.numStrands; i++) {
             let angle = Math.random() * Math.PI * 2;
-            let distance = Math.random() * radius * 2;
+            let distance = Math.random() * radius * 3;
 
             let x = cx + distance * Math.cos(angle);
             let z = cz + distance * Math.sin(angle);
 
-            const root = new THREE.Vector3(x, 25, z);
-            const hairSim = new HairSimulation(10, 4, new THREE.Vector3(0, -9.8, 0), 0.99, 5, root);
+            const root = new THREE.Vector3(x, 10, z);
+            const hairSim = new HairSimulation(25, 1, new THREE.Vector3(0, -9.8, 0), 0.99, 5, root, sphere);
             this.hairSims.push(hairSim);
 
             const color = new THREE.Color(0xffffff);
             color.setHex(Math.random() * 0xffffff);
-            const material = new THREE.MeshBasicMaterial({ color: color });
+            const material = new THREE.MeshPhongMaterial({ color: color});
             this.materials.push(material);
 
             let tubeMesh = Hair.createTube(hairSim.getPositions(), material);
@@ -225,9 +233,9 @@ class Hair {
         const materials = this.getMaterials();
 
         // Clear previous strands
-        while (scene.children.length > 2) {
+        while (scene.children.length > 5) {
             
-            scene.remove(scene.children[2]);
+            scene.remove(scene.children[5]);
         }
 
         // Create and add new strands
@@ -246,7 +254,7 @@ class Hair {
 
     static createTube(positions, material) {
         const curve = new THREE.CatmullRomCurve3(positions);
-        const tubeGeo = new THREE.TubeGeometry(curve, 65, 0.03, 20, false);
+        const tubeGeo = new THREE.TubeGeometry(curve, 70, 0.05, 30, false);
         const mesh = new THREE.Mesh(tubeGeo, material);
         return mesh;
     }
@@ -265,6 +273,7 @@ class Grabber {
         this.scopeWidth = 10;
         this.scopeHeight = 10;
         this.proximityRange = 5.0; // Define a proximity range to detect nearby objects
+
     }
 
     increaseTime(dt) {
@@ -276,7 +285,6 @@ class Grabber {
         this.mousePos = new THREE.Vector2();
         this.mousePos.x = ((x - rect.left) / rect.width) * 2 - 1;
         this.mousePos.y = -((y - rect.top) / rect.height) * 2 + 1;
-        mouseXY = this.mousePos.clone();
         this.raycaster.setFromCamera(this.mousePos, camera);
     }
 
@@ -306,7 +314,6 @@ class Grabber {
                 this.physicsObject = obj;
                 this.distance = intersects[0].distance;
                 var pos = this.raycaster.ray.origin.clone();
-                console.log(this.physicsObject);
                 pos.addScaledVector(this.raycaster.ray.direction, this.distance);
                 this.physicsObject.startGrab(pos);
                 this.findNearbyObjects(pos);
@@ -318,6 +325,7 @@ class Grabber {
                 this.time = 0.0;
             }
         }
+
     }
 
     move(x, y) {
@@ -381,13 +389,12 @@ function onKeyUp( evt ) {
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
 
-var mouseXY;
-
 const dirLight = new THREE.DirectionalLight(0xffffff, 1);
-dirLight.position.set(0, 0, 1);
+dirLight.position.set(0, 3, 0);
 dirLight.castShadow = true;
-dirLight.shadow.mapSize.width = 1024;
-dirLight.shadow.mapSize.height = 1024;
+dirLight.shadow.bias = -0.01;
+dirLight.shadow.mapSize.width = 2048;
+dirLight.shadow.mapSize.height = 2048;
 dirLight.shadow.camera.near = -10;
 dirLight.shadow.camera.far = 100;
 dirLight.shadow.camera.top = 30;
@@ -406,15 +413,41 @@ const controls = new OrbitControls(camera, renderer.domElement);
 
 camera.position.set(0, 10, 20);
 controls.update();
+scene.add( new THREE.AmbientLight( 0x505050 ) );
+scene.fog = new THREE.Fog( 0x000000, 0, 200 );
 
-const geometry = new THREE.SphereGeometry( 2, 32, 16 ); 
-const material = new THREE.MeshBasicMaterial( { color: 0xffff00 } ); 
-const sphere = new THREE.Mesh( geometry, material ); 
-sphere.translateX(-20);
+const spotLight = new THREE.SpotLight( 0xffffff, 500 );
+spotLight.position.set( 0, 10, 15 );
+spotLight.angle = 1;
+spotLight.penumbra = 1;
+spotLight.decay = 2;
+spotLight.distance = 0;
+spotLight.shadow.mapSize.width = 1023;
+spotLight.shadow.mapSize.height = 1023;
+spotLight.shadow.camera.near = 1;
+spotLight.shadow.camera.far = 10;
+spotLight.shadow.focus = 1;
+scene.add( spotLight );
+
+const geometry = new THREE.SphereGeometry( 3, 16, 16 ); 
+const material = new THREE.MeshPhongMaterial( { color: 0xD3D3D3, shininess: 30, specular: 0x505050 } ); 
+const sphere = new THREE.Mesh( geometry, material );
+sphere.castShadow = true; 
+sphere.translateX(-5);
 scene.add( sphere );
 
-const hair = new Hair(18); // Initialize Hair with 20 strands
+const planeGeo = new THREE.PlaneGeometry(1500,500);
+const planeMaterial = new THREE.MeshPhongMaterial( { color: 0x808080, shininess: 150, side: THREE.DoubleSide} ); 
+const plane = new THREE.Mesh( planeGeo, planeMaterial );
+plane.castShadow = true; 
+plane.receiveShadow = true;
+plane.translateY(-30);
+plane.rotateX(1.5707963267948967);
+scene.add( plane );
+
+const hair = new Hair(30,sphere); // Initialize Hair with 20 strands
 hair.initStrand(scene);
+spotLight.target = sphere;
 
 let mouseDown = false;
 let isAdown = false;
